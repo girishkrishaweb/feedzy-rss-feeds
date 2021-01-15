@@ -9,6 +9,10 @@
  * @subpackage feedzy-rss-feeds/includes/abstract
  */
 
+use Feedzy_Rss_Feeds\Import\IFeedProtocolParser;
+use Feedzy_Rss_Feeds\Import\FeedJson;
+use Feedzy_Rss_Feeds\Import\FeedRss;
+
 /**
  * The Feedzy RSS functions of the plugin.
  *
@@ -603,7 +607,30 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 
 		return apply_filters( 'feedzy_alter_feed_url', $url );
 	}
-
+    
+    /**
+     * TEMPORARY factory method for a feed protocol implementation class
+     * TODO: Move to a proper place and modify after more thorough implementation of feed protocol classes
+     *
+     * @param string $feed_protocol
+     *
+     * @return IFeedProtocolParser
+     * @throws Exception
+     */
+    protected function createFeedClass($feed_protocol)
+    {
+        switch ($feed_protocol) {
+            // TODO: Replace protocol names with constants
+            case 'rss':
+            case 'atom':
+                return new FeedRss();
+            case 'json':
+                return new FeedJson();
+            default:
+                throw new \Exception(__('Unknown Protocol'));
+        }
+	}
+	
 	/**
 	 * Fetch the content feed from a group of urls.
 	 *
@@ -618,26 +645,18 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 	 * @return SimplePie|string|void|WP_Error The feed resource.
 	 */
 	public function fetch_feed( $feed_url, $cache = '12_hours', $sc ) {
-		// Load SimplePie if not already
 		do_action( 'feedzy_pre_http_setup', $feed_url );
+		
+		try {
+		    // TODO: Feed protocol must be autodetected. Develop a detector.
+            $feedProtocol = $this->createFeedClass('rss');
+        } catch (\Exception $e) {
+		    // TODO: Handle errors according to the project convention
+            do_action( 'themeisle_log_event', FEEDZY_NAME, sprintf( 'Got an Error (%s)', $e->getMessage() ), 'debug', __FILE__, __LINE__ );
+            return $e->getMessage();
+        }
 
-		// Load SimplePie Instance
-		$feed = $this->init_feed( $feed_url, $cache, $sc ); // Not used as log as #41304 is Opened.
-
-		// Report error when is an error loading the feed
-		if ( is_wp_error( $feed ) ) {
-			// Fallback for different edge cases.
-			if ( is_array( $feed_url ) ) {
-				$feed_url = array_map( 'html_entity_decode', $feed_url );
-			} else {
-				$feed_url = html_entity_decode( $feed_url );
-			}
-
-			$feed_url = $this->get_valid_feed_urls( $feed_url, $cache );
-
-			$feed = $this->init_feed( $feed_url, $cache, $sc ); // Not used as log as #41304 is Opened.
-
-		}
+        $feed = $feedProtocol->fetch_feed($feed_url, $cache, $sc);
 
 		do_action( 'feedzy_post_http_teardown', $feed_url );
 
@@ -649,10 +668,11 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 	 *
 	 * Method to avoid using core implementation in order
 	 * order to fix issues reported here: https://core.trac.wordpress.org/ticket/41304
-	 * Bug: #41304 with WP wp_kses sanitizer used by WP SimplePie implementation.
+	 * Bug: # with WP wp_kses sanitizer used by WP SimplePie implementation.
 	 *
 	 * NOTE: This is temporary should be removed as soon as #41304 is patched.
-	 *
+	 * TODO: There is a patch for #41304 but it doesn't seem to be included into wp code. Consider overriding the kses sanitizer
+     *
 	 * @since   3.1.7
 	 * @access  private
 	 *
@@ -776,7 +796,7 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 
 	/**
 	 * Change the default user agent based on the feed url.
-	 *
+	 * TODO: Remove
 	 * @param string|array $urls Feed urls.
 	 *
 	 * @return string Optimal User Agent
@@ -845,6 +865,7 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 	 * @return bool
 	 */
 	protected function check_valid_xml( $url, $cache ) {
+	    // TODO: Put validator into RSSFeed class and consider using a simpler XML validation method
 		$feed = $this->init_feed( $url, $cache, array() );
 		if ( $feed->error() ) {
 			return false;

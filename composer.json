@@ -26,7 +26,10 @@
   "autoload": {
     "files": [
       "vendor/codeinwp/themeisle-sdk/load.php"
-    ]
+    ],
+    "psr-4": {
+      "Feedzy_Rss_Feeds\\": "includes/"
+    }
   },
   "minimum-stability": "dev",
   "prefer-stable": true,
