@@ -1670,7 +1670,6 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 			if (isset($item['id'])) $newItem->addChild('guid', $item['id']);
 			if (isset($item['title'])) $newItem->addChild('title', $item['title']);
 			if (isset($item['content_text'])) $newItem->addChild('description', $item['content_text']);
-			if (isset($item['content_html'])) $newItem->addChild('description', $item['content_html']);
 			if (isset($item['date_published'])) $newItem->addChild('pubDate', $item['date_published']);
 			if (isset($item['url'])) $newItem->addChild('link', $item['url']);
 	
@@ -1685,6 +1684,7 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 			}
 		}
 
+		// Prepaer DOM View
 		$dom = dom_import_simplexml($xmlFeed)->ownerDocument;
 		$dom->preserveWhiteSpace = false;
 		$dom->formatOutput = true;
