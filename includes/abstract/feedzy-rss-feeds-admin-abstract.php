@@ -376,6 +376,13 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 		if ( empty( $feed_url ) ) {
 			return $content;
 		}
+
+		// In case of JSON convert the JSON String to XML
+		if ( $this->convert_jsonfeed_to_rss( @file_get_contents( $feed_url ) ) ) {
+			// In case of JSON change original $feed_url to the default clean RSS template
+			$feed_url = FEEDZY_ABSURL ."templates/xml/empty-rss.xml";
+		}
+
 		$cache   = $sc['refresh'];
 
 		// Disregard the pseudo-shortcode coming from Gutenberg as a lazy one.
@@ -419,20 +426,13 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 			}
 		}
 
-		$json_items = (array) json_decode( file_get_contents( $feed_url ) );
-		
-		if ( !empty( $json_items ) ) {
-			// In case of JSON change original $feed_url to the default clean RSS template
-			$feed_url = FEEDZY_ABSURL ."templates/xml/empty-rss.xml";
-		}
-
 		$feed    = $this->fetch_feed( $feed_url, $cache, $sc );
 		if ( is_string( $feed ) ) {
 			return $feed;
 		}
 
 		$sc      = $this->sanitize_attr( $sc, $feed_url );
-		$content = $this->render_content( $sc, $feed, $content, $feed_url, $json_items );
+		$content = $this->render_content( $sc, $feed, $content, $feed_url );
 
 		return $content;
 	}
@@ -929,12 +929,6 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 	 * @return  string
 	 */
 	private function render_content( $sc, $feed, $content = '', $feed_url, $json_items = false ) {
-		// In case of JSON Items Copy them to the Empty Feed RSS XML
-		if ( !empty( $json_items ) ) {
-			$feed->copy( $json_items );
-		}
-
-		// Content Rendering Start
 		$count                   = 0;
 		$sizes                   = array(
 			'width'  => $sc['size'],
@@ -963,9 +957,6 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 
 		// Display the error message and quit (before showing the template for pro).
 		if ( empty( $feed_items ) ) {
-			// TODO: Assing Feed Items from the JSON including the rest of the needed data for the Dry Run
-			var_dump( $sc );
-			die();
 			$content .= esc_html( $sc['error_empty'] );
 			$content .= '</ul> </div>';
 			return $content;
@@ -1635,5 +1626,74 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 		}
 
 		return false;
+	}
+
+	protected function convert_jsonfeed_to_rss( $content = NULL, $max = NULL ) {
+		//Test if the content is actual JSON
+		json_decode($content);
+		if( json_last_error() !== JSON_ERROR_NONE) return FALSE;
+	
+		//Now, is it valid JSONFeed?
+		$jsonFeed = json_decode($content, TRUE);
+		if (!isset($jsonFeed['version'])) return FALSE;
+		if (!isset($jsonFeed['title'])) return FALSE;
+		if (!isset($jsonFeed['items'])) return FALSE;
+	
+		//Decode the feed to a PHP array
+		$jf = json_decode($content, TRUE);
+	
+		//Get the latest item publish date to use as the channel pubDate
+		$latestDate = 0;
+		foreach ($jf['items'] as $item) {
+			if (strtotime($item['date_published']) > $latestDate) $latestDate = strtotime($item['date_published']);
+		}
+		$lastBuildDate = date(DATE_RSS, $latestDate);
+	
+		//Create the RSS feed
+		$xmlFeed = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"></rss>');
+		$xmlFeed->addChild("channel");
+	
+		//Required elements
+		$xmlFeed->channel->addChild("title", $jf['title']);
+		$xmlFeed->channel->addChild("pubDate", $lastBuildDate);
+		$xmlFeed->channel->addChild("lastBuildDate", $lastBuildDate);
+	
+		//Optional elements
+		if (isset($jf['description'])) $xmlFeed->channel->description = $jf['description'];
+		if (isset($jf['home_page_url'])) $xmlFeed->channel->link = $jf['home_page_url'];
+	
+		//Items
+		foreach ($jf['items'] as $item) {
+			$newItem = $xmlFeed->channel->addChild('item');
+	
+			//Standard stuff
+			if (isset($item['id'])) $newItem->addChild('guid', $item['id']);
+			if (isset($item['title'])) $newItem->addChild('title', $item['title']);
+			if (isset($item['content_text'])) $newItem->addChild('description', $item['content_text']);
+			if (isset($item['content_html'])) $newItem->addChild('description', $item['content_html']);
+			if (isset($item['date_published'])) $newItem->addChild('pubDate', $item['date_published']);
+			if (isset($item['url'])) $newItem->addChild('link', $item['url']);
+	
+			//Enclosures?
+			if(isset($item['attachments'])) {
+				foreach($item['attachments'] as $attachment) {
+					$enclosure = $newItem->addChild('enclosure');
+					$enclosure['url'] = $attachment['url'];
+					$enclosure['type'] = $attachment['mime_type'];
+					$enclosure['length'] = $attachment['size_in_bytes'];
+				}
+			}
+		}
+
+		$dom = dom_import_simplexml($xmlFeed)->ownerDocument;
+		$dom->preserveWhiteSpace = false;
+		$dom->formatOutput = true;
+
+		// Save the Converted JSON Feed to the empty template in order to re-use the default Feedzy functionality
+		$fd = fopen( FEEDZY_ABSPATH ."/templates/xml/empty-rss.xml", "w" );
+		fwrite( $fd, $dom->saveXML() );
+		fclose( $fd );
+
+		return true;
 	}
 }
