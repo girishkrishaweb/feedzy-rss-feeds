@@ -81,4 +81,24 @@ class Feedzy_Rss_Feeds_Util_SimplePie extends SimplePie {
 		}
 		return parent::sort_items( $a, $b );
 	}
+
+	/**
+	 * Coping method for JSON to XML mapping
+	 *
+	 * @access public
+	 * @param $json_items The JSON Items which has to be copied
+	 * @return NONE VOID Method
+	 */
+	public function copy( $json_items ) {
+		// Perform Manual Mapping first
+		$this->feed_url = !empty( $json_items[ "feed_url" ] ) ? $json_items[ "feed_url" ] : "";
+		$this->permanent_url = !empty( $json_items[ "feed_url" ] ) ? $json_items[ "feed_url" ] : "";
+
+		// Perform Auto Mapping on the Channel
+		if ( !empty( $json_items ) ) {
+			foreach ( $json_items as $item_key => $item_value ) {
+				$this->data[ "child" ][ "" ][ "rss" ][ 0 ][ "child" ][ "" ][ "channel" ][ 0 ][ $item_key ] = $item_value;
+			}
+		}
+	}
 }

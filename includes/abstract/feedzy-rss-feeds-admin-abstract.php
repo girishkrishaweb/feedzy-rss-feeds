@@ -419,12 +419,20 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 			}
 		}
 
+		$json_items = (array) json_decode( file_get_contents( $feed_url ) );
+		
+		if ( !empty( $json_items ) ) {
+			// In case of JSON change original $feed_url to the default clean RSS template
+			$feed_url = FEEDZY_ABSURL ."templates/xml/empty-rss.xml";
+		}
+
 		$feed    = $this->fetch_feed( $feed_url, $cache, $sc );
 		if ( is_string( $feed ) ) {
 			return $feed;
 		}
+
 		$sc      = $this->sanitize_attr( $sc, $feed_url );
-		$content = $this->render_content( $sc, $feed, $content, $feed_url );
+		$content = $this->render_content( $sc, $feed, $content, $feed_url, $json_items );
 
 		return $content;
 	}
@@ -679,6 +687,7 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 		}
 
 		$feed = new Feedzy_Rss_Feeds_Util_SimplePie( $sc );
+
 		if ( ! $allow_https && method_exists( $feed, 'set_curl_options' ) ) {
 			$feed->set_curl_options(
 				array(
@@ -744,6 +753,7 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 		$feed->init();
 
 		$error = $feed->error();
+
 		// error could be an array, so let's join the different errors.
 		if ( is_array( $error ) ) {
 			$error = implode( '|', $error );
@@ -918,7 +928,13 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 	 *
 	 * @return  string
 	 */
-	private function render_content( $sc, $feed, $content = '', $feed_url ) {
+	private function render_content( $sc, $feed, $content = '', $feed_url, $json_items = false ) {
+		// In case of JSON Items Copy them to the Empty Feed RSS XML
+		if ( !empty( $json_items ) ) {
+			$feed->copy( $json_items );
+		}
+
+		// Content Rendering Start
 		$count                   = 0;
 		$sizes                   = array(
 			'width'  => $sc['size'],
@@ -947,6 +963,9 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 
 		// Display the error message and quit (before showing the template for pro).
 		if ( empty( $feed_items ) ) {
+			// TODO: Assing Feed Items from the JSON including the rest of the needed data for the Dry Run
+			var_dump( $sc );
+			die();
 			$content .= esc_html( $sc['error_empty'] );
 			$content .= '</ul> </div>';
 			return $content;
