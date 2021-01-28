@@ -377,12 +377,6 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 			return $content;
 		}
 
-		// In case of JSON convert the JSON String to XML
-		if ( $this->convert_jsonfeed_to_rss( @file_get_contents( $feed_url ) ) ) {
-			// In case of JSON change original $feed_url to the default clean RSS template
-			$feed_url = FEEDZY_ABSURL ."templates/xml/empty-rss.xml";
-		}
-
 		$cache   = $sc['refresh'];
 
 		// Disregard the pseudo-shortcode coming from Gutenberg as a lazy one.
@@ -671,6 +665,12 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 	 * @return SimplePie
 	 */
 	private function init_feed( $feed_url, $cache, $sc, $allow_https = FEEDZY_ALLOW_HTTPS ) {
+		// In case of JSON convert the JSON String to XML
+		if ( $this->convert_jsonfeed_to_rss( @file_get_contents( $feed_url ) ) ) {
+			// In case of JSON change original $feed_url to the default clean RSS template
+			$feed_url = FEEDZY_ABSURL ."templates/xml/empty-rss.xml";
+		}
+
 		$unit_defaults = array(
 			'mins'  => MINUTE_IN_SECONDS,
 			'hours' => HOUR_IN_SECONDS,
@@ -1628,64 +1628,74 @@ abstract class Feedzy_Rss_Feeds_Admin_Abstract {
 		return false;
 	}
 
-	protected function convert_jsonfeed_to_rss( $content = NULL, $max = NULL ) {
+	/**
+	 * JSON Feed to XML conversion method
+	 *
+	 * @access  protected
+	 *
+	 * @param   string $content.
+	 *
+	 * @return bool
+	 */
+	protected function convert_jsonfeed_to_rss( $content = NULL ) {
 		//Test if the content is actual JSON
-		json_decode($content);
-		if( json_last_error() !== JSON_ERROR_NONE) return FALSE;
+		json_decode( $content );
+		if ( json_last_error() !== JSON_ERROR_NONE ) return FALSE;
 	
 		//Now, is it valid JSONFeed?
-		$jsonFeed = json_decode($content, TRUE);
-		if (!isset($jsonFeed['version'])) return FALSE;
-		if (!isset($jsonFeed['title'])) return FALSE;
-		if (!isset($jsonFeed['items'])) return FALSE;
+		$jsonFeed = json_decode( $content, TRUE );
+		if ( !isset( $jsonFeed[ 'version' ] ) ) return FALSE;
+		if ( !isset( $jsonFeed[ 'title' ] ) ) return FALSE;
+		if ( !isset( $jsonFeed[ 'items' ] ) ) return FALSE;
 	
 		//Decode the feed to a PHP array
-		$jf = json_decode($content, TRUE);
+		$jf = json_decode( $content, TRUE );
 	
 		//Get the latest item publish date to use as the channel pubDate
 		$latestDate = 0;
-		foreach ($jf['items'] as $item) {
-			if (strtotime($item['date_published']) > $latestDate) $latestDate = strtotime($item['date_published']);
+		foreach ( $jf[ 'items' ] as $item ) {
+			if ( strtotime( $item[ 'date_published' ] ) > $latestDate ) $latestDate = strtotime( $item[ 'date_published' ] );
 		}
-		$lastBuildDate = date(DATE_RSS, $latestDate);
+		$lastBuildDate = date( DATE_RSS, $latestDate );
 	
 		//Create the RSS feed
-		$xmlFeed = new SimpleXMLElement('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"></rss>');
-		$xmlFeed->addChild("channel");
+		$xmlFeed = new SimpleXMLElement( '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"></rss>' );
+		$xmlFeed->addChild( "channel" );
 	
 		//Required elements
-		$xmlFeed->channel->addChild("title", $jf['title']);
-		$xmlFeed->channel->addChild("pubDate", $lastBuildDate);
-		$xmlFeed->channel->addChild("lastBuildDate", $lastBuildDate);
+		$xmlFeed->channel->addChild( "title", $jf['title'] );
+		$xmlFeed->channel->addChild( "pubDate", $lastBuildDate );
+		$xmlFeed->channel->addChild( "lastBuildDate", $lastBuildDate );
 	
 		//Optional elements
-		if (isset($jf['description'])) $xmlFeed->channel->description = $jf['description'];
-		if (isset($jf['home_page_url'])) $xmlFeed->channel->link = $jf['home_page_url'];
+		if ( isset( $jf[ 'description' ] ) ) $xmlFeed->channel->description = $jf[ 'description' ];
+		if ( isset( $jf[ 'home_page_url' ] ) ) $xmlFeed->channel->link = $jf[ 'home_page_url' ];
 	
 		//Items
-		foreach ($jf['items'] as $item) {
+		foreach ( $jf[ 'items' ] as $item ) {
 			$newItem = $xmlFeed->channel->addChild('item');
 	
 			//Standard stuff
-			if (isset($item['id'])) $newItem->addChild('guid', $item['id']);
-			if (isset($item['title'])) $newItem->addChild('title', $item['title']);
-			if (isset($item['content_html'])) $newItem->addChild('description', htmlspecialchars( $item['content_html'] ) );
-			if (isset($item['date_published'])) $newItem->addChild('pubDate', $item['date_published']);
-			if (isset($item['url'])) $newItem->addChild('link', $item['url']);
+			if ( isset( $item[ 'id' ] ) ) $newItem->addChild( 'guid', $item[ 'id' ] );
+			if ( isset( $item[ 'title' ] ) ) $newItem->addChild( 'title', $item[ 'title' ] );
+			if ( isset( $item[ 'content_html' ] ) ) { $newItem->addChild( 'description', htmlspecialchars( $item['content_html'] ) ); }
+			elseif ( isset( $item[ 'content_text' ] ) ) { $newItem->addChild( 'description', $item[ 'content_text' ] ); }
+			if ( isset( $item[ 'date_published' ] ) ) $newItem->addChild( 'pubDate', $item[ 'date_published' ] );
+			if ( isset( $item[ 'url' ] ) ) $newItem->addChild( 'link', $item[ 'url' ] );
 	
 			//Enclosures?
-			if(isset($item['attachments'])) {
-				foreach($item['attachments'] as $attachment) {
-					$enclosure = $newItem->addChild('enclosure');
-					$enclosure['url'] = $attachment['url'];
-					$enclosure['type'] = $attachment['mime_type'];
-					$enclosure['length'] = $attachment['size_in_bytes'];
+			if( isset( $item[ 'attachments' ] ) ) {
+				foreach( $item[ 'attachments' ] as $attachment ) {
+					$enclosure = $newItem->addChild( 'enclosure' );
+					$enclosure[ 'url' ] = $attachment[ 'url' ];
+					$enclosure[ 'type' ] = $attachment[ 'mime_type' ];
+					$enclosure[ 'length' ] = $attachment[ 'size_in_bytes' ];
 				}
 			}
 		}
 
 		// Prepaer DOM View
-		$dom = dom_import_simplexml($xmlFeed)->ownerDocument;
+		$dom = dom_import_simplexml( $xmlFeed )->ownerDocument;
 		$dom->preserveWhiteSpace = false;
 		$dom->formatOutput = true;
 
